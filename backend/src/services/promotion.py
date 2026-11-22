@@ -123,9 +123,11 @@ def list_settlements(user):
                p.list_price, s.code store_code, s.name store_name, sku.sku, sku.name product_name,
                e.id, e.status, e.pos_reference, e.redeemed_units, e.note, e.review_note,
                IF(o.plan_id IS NULL,NULL,COALESCE(l.ledger_units,0)) ledger_units,
-               e.redeemed_units * p.unit_discount actual_discount,
-               (p.unit_cap - e.redeemed_units) * p.unit_discount unspent_discount,
-               e.redeemed_units * (p.list_price - p.unit_discount) promo_net_sales
+               e.redeemed_units * COALESCE(e.settlement_unit_discount, p.unit_discount) actual_discount,
+               (COALESCE(e.settlement_unit_cap, p.unit_cap) - e.redeemed_units)
+                   * COALESCE(e.settlement_unit_discount, p.unit_discount) unspent_discount,
+               e.redeemed_units * (COALESCE(e.settlement_list_price, p.list_price)
+                   - COALESCE(e.settlement_unit_discount, p.unit_discount)) promo_net_sales
         FROM promotion_plans p JOIN stores s ON s.id=p.store_id JOIN products sku ON sku.id=p.product_id
         LEFT JOIN promotion_settlements e ON e.plan_id=p.id
         LEFT JOIN basket_offers o ON o.plan_id=p.id
@@ -155,15 +157,19 @@ def submit_settlement(plan_id, data, user):
                 if previous['status'] != Report.returned:
                     raise HTTPException(409, '只有已退回的对账单可以更正')
                 report_id = previous['id']
-                cur.execute('''UPDATE promotion_settlements SET pos_reference=%s, redeemed_units=%s, note=%s,
+                cur.execute('''UPDATE promotion_settlements SET pos_reference=%s, redeemed_units=%s,
+                    settlement_unit_cap=%s, settlement_unit_discount=%s, settlement_list_price=%s, note=%s,
                     status=%s, submitted_by=%s, submitted_at=UTC_TIMESTAMP(), reviewed_by=NULL,
                     reviewed_at=NULL, review_note=NULL WHERE id=%s''',
-                    (reference, data.redeemed_units, data.note, Report.submitted, user['id'], report_id))
+                    (reference, data.redeemed_units, plan['unit_cap'], plan['unit_discount'], plan['list_price'],
+                     data.note, Report.submitted, user['id'], report_id))
             else:
                 cur.execute('''INSERT INTO promotion_settlements
-                    (plan_id,store_id,pos_reference,redeemed_units,note,submitted_by)
-                    VALUES(%s,%s,%s,%s,%s,%s)''',
-                    (plan_id, plan['store_id'], reference, data.redeemed_units, data.note, user['id']))
+                    (plan_id,store_id,pos_reference,redeemed_units,settlement_unit_cap,
+                     settlement_unit_discount,settlement_list_price,note,submitted_by)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
+                    (plan_id, plan['store_id'], reference, data.redeemed_units, plan['unit_cap'],
+                     plan['unit_discount'], plan['list_price'], data.note, user['id']))
                 report_id = cur.lastrowid
             cur.execute('UPDATE promotion_plans SET status=%s WHERE id=%s', (Plan.settling, plan_id))
             audit(cur, user, 'submit_settlement', 'promotion_settlement', report_id,

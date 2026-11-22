@@ -33,6 +33,9 @@ PROMOTION_SCHEMA = [
         store_id INT NOT NULL,
         pos_reference VARCHAR(40) NOT NULL,
         redeemed_units INT NOT NULL,
+        settlement_unit_cap INT NULL,
+        settlement_unit_discount DECIMAL(10,2) NULL,
+        settlement_list_price DECIMAL(10,2) NULL,
         note VARCHAR(240) NOT NULL,
         status ENUM('submitted','returned','confirmed') NOT NULL DEFAULT 'submitted',
         submitted_by INT NOT NULL,
@@ -46,4 +49,11 @@ PROMOTION_SCHEMA = [
         UNIQUE KEY uq_store_pos (store_id, pos_reference),
         CHECK (redeemed_units BETWEEN 0 AND 100000)
     )""",
+]
+
+
+PROMOTION_MIGRATIONS = [
+    'ALTER TABLE promotion_settlements ADD COLUMN settlement_unit_cap INT NULL',
+    'ALTER TABLE promotion_settlements ADD COLUMN settlement_unit_discount DECIMAL(10,2) NULL',
+    'ALTER TABLE promotion_settlements ADD COLUMN settlement_list_price DECIMAL(10,2) NULL',
 ]
