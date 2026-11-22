@@ -116,7 +116,10 @@ export async function budgetTransfer({ api, role, head, shell, toast, refresh, i
     data.source_plan_id = Number(data.source_plan_id);
     data.target_plan_id = Number(data.target_plan_id);
     data.transferred_units = Number(data.transferred_units);
-    act(form, event.submitter, () => post(api, '/promotions/budget-transfer', data), result => {
+    let result;
+    act(form, event.submitter, async () => {
+      result = await post(api, '/promotions/budget-transfer', data);
+    }, () => {
       toast(result.replayed ? '该请求已处理，未重复划拨' : `已划拨 ${result.transferred_units} 件，两边余额已更新`);
       refresh();
     });
