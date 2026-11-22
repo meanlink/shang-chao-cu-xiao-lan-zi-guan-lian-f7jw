@@ -72,4 +72,19 @@ def desk_detail(plan_id, user):
         if user['role'] == 'store_operator' and requirements:
             cur.execute(f'{CATALOG} ORDER BY p.sku')
             catalog = cur.fetchall()
-        return {'requirements': requirements, 'receipts': receipts, 'catalog': catalog}
+        cur.execute('''SELECT t.id, t.transferred_units, t.created_at,
+                              t.source_plan_id, t.target_plan_id,
+                              t.source_cap_before, t.source_cap_after,
+                              t.target_cap_before, t.target_cap_after,
+                              t.source_unit_discount, ss.code source_store_code,
+                              st.code target_store_code
+                       FROM promotion_budget_transfers t
+                       JOIN promotion_plans ps ON ps.id=t.source_plan_id
+                       JOIN promotion_plans pt ON pt.id=t.target_plan_id
+                       JOIN stores ss ON ss.id=ps.store_id
+                       JOIN stores st ON st.id=pt.store_id
+                       WHERE t.source_plan_id=%s OR t.target_plan_id=%s
+                       ORDER BY t.id''', (plan_id, plan_id))
+        transfers = cur.fetchall()
+        return {'requirements': requirements, 'receipts': receipts, 'catalog': catalog,
+                'transfers': transfers}

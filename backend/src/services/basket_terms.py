@@ -25,9 +25,9 @@ def configure(plan_id, data, user):
         if {row['name'] for row in rows} != families:
             raise HTTPException(409, '规则的前件商品族已不可用，请核对商品目录')
         cur.execute('''INSERT INTO basket_offers (plan_id,per_receipt_cap,configured_by)
-                       VALUES (%s,%s,%s) AS incoming
-                       ON DUPLICATE KEY UPDATE per_receipt_cap=incoming.per_receipt_cap,
-                           configured_by=incoming.configured_by,configured_at=UTC_TIMESTAMP()''',
+                       VALUES (%s,%s,%s)
+                       ON DUPLICATE KEY UPDATE per_receipt_cap=VALUES(per_receipt_cap),
+                           configured_by=VALUES(configured_by),configured_at=UTC_TIMESTAMP()''',
                     (plan_id, data.per_receipt_cap, user['id']))
         cur.execute('DELETE FROM basket_offer_requirements WHERE plan_id=%s', (plan_id,))
         cur.executemany('''INSERT INTO basket_offer_requirements (plan_id,family_id,minimum_units)

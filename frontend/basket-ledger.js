@@ -19,6 +19,29 @@ function receiptDesk(plan, catalog) {
   </section>`;
 }
 
+function transferTrail(transfers, plan) {
+  if (!transfers || !transfers.length) return '';
+  const rows = transfers.map(t => {
+    const outgoing = t.source_plan_id === plan.id;
+    const before = outgoing ? t.source_cap_before : t.target_cap_before;
+    const after = outgoing ? t.source_cap_after : t.target_cap_after;
+    const other = outgoing ? t.target_store_code : t.source_store_code;
+    return `<tr>
+      <td class="mono">${String(t.created_at).slice(0, 19).replace('T', ' ')}</td>
+      <td>${outgoing ? '调出至' : '调入自'} ${escapeHtml(other)}</td>
+      <td>${outgoing ? '−' : '+'}${t.transferred_units} 件</td>
+      <td>${before} → <b>${after}</b></td>
+      <td>${money.format(Number(t.source_unit_discount))} / 件</td>
+    </tr>`;
+  }).join('');
+  return `<section class="panel"><h3>预算调拨记录 <span class="kicker">限量调整前后留痕</span></h3>
+    <div class="table-wrap"><table class="promo-table"><thead><tr>
+      <th>时间</th><th>方向 / 对手门店</th><th>划拨件数</th><th>本档期限量（前→后）</th><th>单件立减</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="promo-hint">历史小票与已退回对账单保留当时金额；新核销和对账按调拨后的限量办理。</p>
+  </section>`;
+}
+
 function journal(plan, receipts, role) {
   if (role === 'analyst') return '';
   const canVoid = role === 'store_operator' && plan.status === 'active';
@@ -128,6 +151,7 @@ export async function basketLedger(context, selectedId) {
           <p class="promo-hint">${detail.requirements.map(row => `${escapeHtml(row.family)} ≥ ${row.minimum_units} 件`).join(' · ')} · 单票最多立减 ${plan.per_receipt_cap} 件</p>
         </section>
         ${canRecord ? receiptDesk(plan, detail.catalog) : ''}${journal(plan, detail.receipts, role)}
+        ${transferTrail(detail.transfers, plan)}
       ` : '<section class="panel empty">经理启用逐票核销后，档期和剩余额度会显示在这里。</section>'}</div>
     </div>`);
   document.querySelectorAll('[data-ledger-plan]').forEach(button => {

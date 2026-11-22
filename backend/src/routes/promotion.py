@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 
-from ..schemas.promotion import PromotionPlanIn, SettlementIn, SettlementReviewIn
+from ..schemas.promotion import BudgetTransferIn, PromotionPlanIn, SettlementIn, SettlementReviewIn
 from ..security import current_user, require_roles
-from ..services import promotion
+from ..services import budget_transfer, promotion
 
 router = APIRouter(prefix='/promotions', tags=['promotions'])
 manager = Depends(require_roles('manager'))
@@ -48,3 +48,18 @@ def submit_settlement(plan_id: int, data: SettlementIn, user=operator):
 @router.post('/settlements/{plan_id}/review')
 def review_settlement(plan_id: int, data: SettlementReviewIn, user=manager):
     return promotion.review_settlement(plan_id, data, user)
+
+
+@router.get('/budget-transfer/plans')
+def transferable_plans(user=reader):
+    return budget_transfer.transferable_plans(user)
+
+
+@router.get('/budget-transfer/history')
+def transfer_history(plan_id: int | None = None, user=reader):
+    return budget_transfer.transfer_history(plan_id)
+
+
+@router.post('/budget-transfer', status_code=201)
+def transfer_budget(data: BudgetTransferIn, user=manager):
+    return budget_transfer.transfer_budget(data, user)

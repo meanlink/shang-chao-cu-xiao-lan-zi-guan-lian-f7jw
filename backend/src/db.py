@@ -5,6 +5,7 @@ from pymysql.cursors import DictCursor
 from .config import MYSQL
 from .models.basket_offer import BASKET_OFFER_SCHEMA
 from .models.basket_receipt import BASKET_RECEIPT_SCHEMA
+from .models.budget_transfer import BUDGET_TRANSFER_SCHEMA
 from .models.promotion import PROMOTION_SCHEMA
 
 SCHEMA = [
@@ -29,7 +30,7 @@ def init_db():
         try:
             with connect() as conn:
                 with conn.cursor() as cur:
-                    for sql in [*SCHEMA, *PROMOTION_SCHEMA, *BASKET_OFFER_SCHEMA, *BASKET_RECEIPT_SCHEMA]:
+                    for sql in [*SCHEMA, *PROMOTION_SCHEMA, *BASKET_OFFER_SCHEMA, *BASKET_RECEIPT_SCHEMA, *BUDGET_TRANSFER_SCHEMA]:
                         cur.execute(sql)
             return
         except Exception:

@@ -59,7 +59,7 @@ def create_plan(data, user):
         store = one(cur, 'SELECT active FROM stores WHERE id=%s FOR UPDATE', (data.store_id,))
         if not store or not store['active']:
             raise HTTPException(422, '请选择启用门店')
-        rule = one(cur, 'SELECT * FROM association_rules WHERE id=%s FOR SHARE', (data.rule_id,))
+        rule = one(cur, 'SELECT * FROM association_rules WHERE id=%s LOCK IN SHARE MODE', (data.rule_id,))
         if not rule or rule['status'] != 'published' or rule['support'] < Decimal('0.08') or not rule['store_consistent']:
             raise HTTPException(409, '只有通过统计门槛且已发布的规则能用于排期')
         sku = one(cur, "SELECT p.price, f.name family FROM products p JOIN product_families f ON f.id=p.family_id "

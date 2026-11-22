@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, PositiveInt, StringConstraints
+from pydantic import BaseModel, Field, PositiveInt, StringConstraints, model_validator
 
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=240)]
 
@@ -29,3 +29,20 @@ class SettlementIn(BaseModel):
 class SettlementReviewIn(BaseModel):
     decision: Literal['confirm', 'return']
     note: Note = ''
+
+
+class BudgetTransferIn(BaseModel):
+    source_plan_id: PositiveInt
+    target_plan_id: PositiveInt
+    transferred_units: int = Field(ge=1, le=100000)
+    request_key: Annotated[str, StringConstraints(
+        strip_whitespace=True, min_length=8, max_length=64,
+        pattern=r'^[A-Za-z0-9_-]{8,64}$',
+    )]
+    note: Note = ''
+
+    @model_validator(mode='after')
+    def distinct_plans(self):
+        if self.source_plan_id == self.target_plan_id:
+            raise ValueError('调出与调入档期不能相同')
+        return self
