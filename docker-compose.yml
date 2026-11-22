@@ -1,0 +1,101 @@
+name: supermarket-basket-rules
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME:-supermarket-basket-rules}-db
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-supermarket_basket}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app_pass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_pass}
+    ports:
+      - "${DB_PORT:-17745}:3306"
+    volumes:
+      - supermarket_basket_db:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-supermarket-basket-rules}-redis
+    volumes:
+      - supermarket_basket_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    container_name: ${COMPOSE_PROJECT_NAME:-supermarket-basket-rules}-backend
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-supermarket_basket}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app_pass}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SEED_DEMO: ${SEED_DEMO:-true}
+    ports:
+      - "${BACKEND_PORT:-19245}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - supermarket_basket_shared:/shared
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\")'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    build: ./backend
+    container_name: ${COMPOSE_PROJECT_NAME:-supermarket-basket-rules}-worker
+    command: ["python", "-m", "src.worker"]
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-supermarket_basket}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app_pass}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - supermarket_basket_shared:/shared
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import os,time,sys; p=\"/shared/worker-heartbeat.json\"; sys.exit(0 if os.path.exists(p) and time.time()-os.path.getmtime(p)<30 else 1)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build: ./frontend
+    container_name: ${COMPOSE_PROJECT_NAME:-supermarket-basket-rules}-frontend
+    ports:
+      - "${FRONTEND_PORT:-18245}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ | grep -q '促销篮子' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  supermarket_basket_db:
+  supermarket_basket_redis:
+  supermarket_basket_shared:
