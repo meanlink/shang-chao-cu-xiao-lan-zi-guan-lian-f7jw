@@ -15,7 +15,7 @@ function planBalance(p) {
 function transferForm(plans) {
   const sources = plans.filter(p => p.partners.length);
   if (!sources.length) {
-    return '<div class="empty">暂无可调拨组合：需要两家门店存在同款 SKU、相同单件立减且仍在执行的逐票档期。</div>';
+    return '<div class="empty">暂无可调拨组合：需要两家门店存在同款 SKU、金额可折成整件且仍在执行的逐票档期。</div>';
   }
   const sourceOptions = sources.map(p =>
     `<option value="${p.id}">#${p.id} ${escapeHtml(p.store_name)} · ${escapeHtml(p.sku)} ${escapeHtml(p.product_name)}</option>`).join('');
@@ -24,7 +24,7 @@ function transferForm(plans) {
       <select name="source_plan_id" required><option value="">请选择调出档期</option>${sourceOptions}</select></label>
     <label class="field"><span>调入档期</span>
       <select name="target_plan_id" required><option value="">请先选择调出档期</option></select></label>
-    ${input('transferred_units', '划拨件数（整件）', 'type="number" min="1" value="1" required')}
+    ${input('transferred_units', '调出件数（整件）', 'type="number" min="1" value="1" required')}
     <input type="hidden" name="request_key" value="${requestKey()}">
     ${input('note', '调拨说明（可选）', 'maxlength="240"')}
     <p class="promo-hint" id="transfer-quote" aria-live="polite"></p>
@@ -36,14 +36,14 @@ function transferForm(plans) {
 function historyTable(rows) {
   if (!rows.length) return '<div class="empty">调拨成功后，两边档期的限量变化和操作人会留痕在这里。</div>';
   return `<div class="table-wrap"><table class="promo-table"><thead><tr>
-    <th>时间 / 编号</th><th>调出 → 调入</th><th>商品</th><th>划拨件数 / 预算</th>
+    <th>时间 / 编号</th><th>调出 → 调入</th><th>商品</th><th>调出件数 / 调入件数 / 金额</th>
     <th>调出限量（前→后）</th><th>调入限量（前→后）</th><th>操作人 / 备注</th>
   </tr></thead><tbody>${rows.map(t => `<tr>
     <td class="mono">${String(t.created_at).slice(0, 19).replace('T', ' ')}<br>#${t.id}</td>
     <td><b>${escapeHtml(t.source_store_name)}</b><br>→ ${escapeHtml(t.target_store_name)}
       <br><span class="promo-hint">档期 #${t.source_plan_id} → #${t.target_plan_id}</span></td>
     <td>${escapeHtml(t.sku)}<br><span class="promo-hint">${escapeHtml(t.product_name)}</span></td>
-    <td><b>${t.transferred_units} 件</b><br>${money.format(t.transferred_units * Number(t.source_unit_discount))}</td>
+    <td><b>${t.transferred_units} → ${t.target_units ?? t.transferred_units} 件</b><br>${money.format(t.transfer_amount ?? (t.transferred_units * Number(t.source_unit_discount)))}</td>
     <td>${t.source_cap_before} → <b>${t.source_cap_after}</b></td>
     <td>${t.target_cap_before} → <b>${t.target_cap_after}</b></td>
     <td>${escapeHtml(t.operator_name)}${t.note ? `<br><span class="promo-hint">${escapeHtml(t.note)}</span>` : ''}</td>
@@ -57,7 +57,7 @@ export async function budgetTransfer({ api, role, head, shell, toast, refresh, i
   ]);
   if (!isCurrent()) return;
   const sources = plans.filter(p => p.partners.length);
-  shell(head('PROMOTIONS / BUDGET TRANSFER', '跨店预算调拨', '把仍在执行的同款逐票促销预算，按相同单件立减整建制划拨给另一家门店。任一侧失败两边余额都不变。') + `
+  shell(head('PROMOTIONS / BUDGET TRANSFER', '跨店预算调拨', '把仍在执行的同款逐票促销预算，按金额折成两边都能使用的整件额度后划拨给另一家门店。任一侧失败两边余额都不变。') + `
     <div class="grid">
       <section class="panel span-8"><h3>执行中档期与余额 <span class="kicker">${plans.length} 条可参与</span></h3>
         ${plans.length ? `<div class="table-wrap"><table class="promo-table"><thead><tr>
@@ -73,7 +73,7 @@ export async function budgetTransfer({ api, role, head, shell, toast, refresh, i
           }).join('、') : '<span class="promo-hint">无匹配档期</span>'}</td>
         </tr>`).join('')}</tbody></table></div>`
           : '<div class="empty">当前没有仍在执行的逐票促销档期。</div>'}
-        <div class="note promo-policy">仅同 SKU、同单件立减、不同门店且仍在执行（执行中/待对账、未超出档期日期）的两个档期可互相划拨；划拨额为整件，调出方划拨后至少保留 1 件限量。</div>
+        <div class="note promo-policy">仅同 SKU、不同门店且仍在执行（执行中/待对账、未超出档期日期）的两个档期可互相划拨；调出金额必须能折成调入整件，调出方划拨后至少保留 1 件限量。</div>
       </section>
       <section class="panel span-4"><h3>发起调拨</h3>
         ${role === 'manager' ? transferForm(plans) : '<div class="empty">预算划拨由促销经理发起。</div>'}
@@ -104,8 +104,14 @@ export async function budgetTransfer({ api, role, head, shell, toast, refresh, i
     const target = plans.find(p => String(p.id) === targetSelect.value);
     const units = Number(unitsInput.value) || 0;
     if (!source || !target || !units) { quote.textContent = ''; return; }
-    quote.textContent = `划拨 ${units} 件 × ${money.format(source.unit_discount)} = ${money.format(units * source.unit_discount)}；`
-      + `调出限量 ${source.unit_cap}→${source.unit_cap - units}，调入限量 ${target.unit_cap}→${target.unit_cap + units}`;
+    const amount = units * Number(source.unit_discount);
+    const targetUnits = amount / Number(target.unit_discount);
+    if (!Number.isInteger(targetUnits)) {
+      quote.textContent = `调出金额 ${money.format(amount)} 无法折成 ${money.format(target.unit_discount)} / 件的整件额度`;
+      return;
+    }
+    quote.textContent = `调出 ${units} 件 × ${money.format(source.unit_discount)} = ${money.format(amount)}，调入 ${targetUnits} 件；`
+      + `调出限量 ${source.unit_cap}→${source.unit_cap - units}，调入限量 ${target.unit_cap}→${target.unit_cap + targetUnits}`;
   };
   sourceSelect.onchange = syncTargets;
   targetSelect.onchange = updateQuote;
@@ -120,7 +126,7 @@ export async function budgetTransfer({ api, role, head, shell, toast, refresh, i
     act(form, event.submitter, async () => {
       result = await post(api, '/promotions/budget-transfer', data);
     }, () => {
-      toast(result.replayed ? '该请求已处理，未重复划拨' : `已划拨 ${result.transferred_units} 件，两边余额已更新`);
+      toast(result.replayed ? '该请求已处理，未重复划拨' : `已划拨 ${result.transferred_units} 件，调入 ${result.target_units} 件，两边余额已更新`);
       refresh();
     });
   };

@@ -56,8 +56,8 @@ def test_transfer_history_shows_both_balances(pair, users):
     assert len(budget_transfer.transfer_history(dst)) == 1
 
 
-def test_eligible_plans_pair_same_sku_same_discount(pair, catalog, users):
-    # different discount -> not a partner
+def test_eligible_plans_pair_same_sku_and_integral_amount(pair, catalog, users):
+    # different discount remains a partner when the source amount can form whole target units
     other_discount = make_plan(catalog['stores']['SH-XH'], catalog['products']['BK-001'], 4.00, 8,
                                users['store_operator_east']['id'], users['manager']['id'])
     enable_basket_offer(other_discount, users['manager']['id'])
@@ -68,7 +68,7 @@ def test_eligible_plans_pair_same_sku_same_discount(pair, catalog, users):
     plans = {p['id']: p for p in budget_transfer.transferable_plans(user_row(users['manager']['id']))}
     assert plans[pair['source']]['partners'] == [pair['target']]
     assert plans[pair['target']]['partners'] == [pair['source']]
-    assert plans[other_discount]['partners'] == []
+    assert plans[other_discount]['partners'] == [pair['source']]
     assert plans[other_sku]['partners'] == []
     assert plans[pair['source']]['remaining_units'] == 20
 
@@ -95,15 +95,15 @@ def test_reject_different_sku(pair, catalog, users):
     assert caps(pair['source'], pair['target']) == (20, 10)
 
 
-def test_reject_different_unit_discount(pair, catalog, users):
-    other = make_plan(catalog['stores']['SH-XH'], catalog['products']['BK-001'], 4.50, 8,
+def test_different_unit_discount_converts_integral_budget(pair, catalog, users):
+    other = make_plan(catalog['stores']['SH-XH'], catalog['products']['BK-001'], 2.50, 8,
                       users['store_operator_east']['id'], users['manager']['id'])
     enable_basket_offer(other, users['manager']['id'])
-    with pytest.raises(HTTPException) as exc:
-        budget_transfer.transfer_budget(transfer_in(pair['source'], other, 2),
-                                        user_row(users['manager']['id']))
-    assert exc.value.status_code == 422 and '单件立减' in exc.value.detail
-    assert caps(pair['source'], pair['target']) == (20, 10)
+    result = budget_transfer.transfer_budget(transfer_in(pair['source'], other, 2),
+                                             user_row(users['manager']['id']))
+    assert result['transferred_units'] == 2 and result['target_units'] == 4
+    assert result['transferred_amount'] == 10
+    assert caps(pair['source'], other) == (18, 12)
 
 
 def test_reject_same_store(pair, catalog, users):

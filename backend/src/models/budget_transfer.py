@@ -7,6 +7,8 @@ BUDGET_TRANSFER_SCHEMA = [
         source_plan_id INT NOT NULL,
         target_plan_id INT NOT NULL,
         transferred_units INT NOT NULL,
+        target_units INT NOT NULL,
+        transfer_amount DECIMAL(10,2) NOT NULL,
         source_unit_discount DECIMAL(10,2) NOT NULL,
         target_unit_discount DECIMAL(10,2) NOT NULL,
         source_cap_before INT NOT NULL,
@@ -24,7 +26,7 @@ BUDGET_TRANSFER_SCHEMA = [
         CHECK (transferred_units BETWEEN 1 AND 100000),
         CHECK (source_plan_id <> target_plan_id),
         CHECK (source_cap_after = source_cap_before - transferred_units),
-        CHECK (target_cap_after = target_cap_before + transferred_units),
+        CHECK (target_cap_after = target_cap_before + target_units),
         CHECK (source_cap_before >= 1 AND source_cap_after >= 1),
         CHECK (target_cap_before >= 1 AND target_cap_after <= 100000),
         KEY ix_transfer_plans (source_plan_id, target_plan_id)
